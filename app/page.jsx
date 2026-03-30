@@ -5,8 +5,6 @@ import { useState } from "react";
 
 export default function Home() {
   const [prompt, setPrompt] = useState("");
-  const [steps, setSteps] = useState(6);
-  const [cfg, setCfg] = useState(1.5);
   const [loading, setLoading] = useState(false);
   const [imageUrl, setImageUrl] = useState("");
 
@@ -19,7 +17,7 @@ export default function Home() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ prompt, steps, cfg }),
+        body: JSON.stringify({ prompt }),
       });
       const data = await response.json();
       if (data.imageUrl) {
@@ -45,33 +43,6 @@ export default function Home() {
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="steps" className="block text-sm font-medium text-gray-700">Steps: {steps}</label>
-            <input
-              type="range"
-              id="steps"
-              min="1"
-              max="20"
-              value={steps}
-              onChange={(e) => setSteps(Number(e.target.value))}
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="cfg" className="block text-sm font-medium text-gray-700">CFG: {cfg}</label>
-            <input
-              type="range"
-              id="cfg"
-              min="1"
-              max="10"
-              step="0.1"
-              value={cfg}
-              onChange={(e) => setCfg(Number(e.target.value))}
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
             />
           </div>
 

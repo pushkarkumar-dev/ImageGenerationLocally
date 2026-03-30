@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { applyParams } from "@/lib/workflowEngine";
 import { submitWorkflow, getHistory } from "@/lib/comfyClient";
 
-export async function POST(req: Request) {
+export async function POST(req) {
   try {
     const params = await req.json();
     const workflow = applyParams(params);
