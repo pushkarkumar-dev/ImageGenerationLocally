@@ -2,16 +2,24 @@
 import { NextResponse } from "next/server";
 import { applyParams } from "@/lib/workflowEngine";
 import { submitWorkflow, getHistory, COMFYUI_URL } from "@/lib/comfyClient";
+import { query } from "@/lib/db";
+import { initDb } from "@/lib/initDb";
 
 export async function POST(req) {
   try {
-    const params = await req.json();
-    console.log("Received params:", params);
+    // DB init — best-effort, never blocks generation
+    try { await initDb(); } catch (dbErr) {
+      console.error("[generate] DB init failed (generation will proceed):", dbErr.message);
+    }
 
-    const workflow = applyParams(params);
+    const params = await req.json();
+    const { clientId, ...genParams } = params;
+    console.log("Received params:", genParams);
+
+    const workflow = applyParams(genParams);
     console.log("Applied workflow:", JSON.stringify(workflow, null, 2));
 
-    const submitResponse = await submitWorkflow(workflow);
+    const submitResponse = await submitWorkflow(workflow, clientId);
     console.log("Submit response:", submitResponse);
 
     if (submitResponse.error) {
@@ -28,7 +36,7 @@ export async function POST(req) {
     // Poll for the result
     let history;
     let attempts = 0;
-    const maxAttempts = 60;
+    const maxAttempts = 120;
     const interval = 1000;
 
     console.log(`Polling for results for prompt ID: ${promptId}`);
@@ -81,10 +89,28 @@ export async function POST(req) {
 
     console.log("Constructed image URLs:", imageUrls);
 
+    // Persist each image to the database (best-effort)
+    try {
+      const resolution = params.width && params.height
+        ? `${params.width}x${params.height}`
+        : null;
+
+      for (const url of imageUrls) {
+        await query(
+          "INSERT INTO generated_images (prompt, image_url, resolution) VALUES (?, ?, ?)",
+          [params.prompt, url, resolution]
+        );
+      }
+      console.log(`Saved ${imageUrls.length} image(s) to DB.`);
+    } catch (dbErr) {
+      console.error("[generate] DB save failed (image still returned):", dbErr.message);
+    }
+
     return NextResponse.json({ imageUrls });
   } catch (error) {
+    console.error("Internal Server Error:", error);
     return NextResponse.json(
-      { message: "Internal Server Error", error },
+      { message: "Internal Server Error", error: error.message },
       { status: 500 }
     );
   }

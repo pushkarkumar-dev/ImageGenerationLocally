@@ -1,0 +1,28 @@
+import { NextResponse } from "next/server";
+import { query } from "@/lib/db";
+import { initDb } from "@/lib/initDb";
+
+export async function GET(req) {
+  try {
+    await initDb();
+
+    const { searchParams } = new URL(req.url);
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "24", 10)));
+    const offset = (page - 1) * limit;
+
+    const rows = await query(
+      "SELECT id, prompt, video_url, created_at FROM generated_videos WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT ? OFFSET ?",
+      [limit, offset]
+    );
+
+    const [{ total }] = await query(
+      "SELECT COUNT(*) AS total FROM generated_videos WHERE deleted_at IS NULL"
+    );
+
+    return NextResponse.json({ items: rows, total, page, limit });
+  } catch (error) {
+    console.error("[gallery/videos GET]", error);
+    return NextResponse.json({ message: "Internal Server Error" }, { status: 500 });
+  }
+}

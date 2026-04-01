@@ -2,16 +2,24 @@
 import { NextResponse } from "next/server";
 import { applyParamsToVideoWorkflow } from "@/lib/videoWorkflowEngine";
 import { submitWorkflow, getHistory, COMFYUI_URL } from "@/lib/comfyClient";
+import { query } from "@/lib/db";
+import { initDb } from "@/lib/initDb";
 
 export async function POST(req) {
   try {
-    const params = await req.json();
-    console.log("Received params for video generation:", params);
+    // DB init — best-effort, never blocks generation
+    try { await initDb(); } catch (dbErr) {
+      console.error("[generate-video] DB init failed (generation will proceed):", dbErr.message);
+    }
 
-    const workflow = applyParamsToVideoWorkflow(params);
+    const params = await req.json();
+    const { clientId, ...genParams } = params;
+    console.log("Received params for video generation:", genParams);
+
+    const workflow = applyParamsToVideoWorkflow(genParams);
     console.log("Applied video workflow:", JSON.stringify(workflow, null, 2));
 
-    const submitResponse = await submitWorkflow(workflow);
+    const submitResponse = await submitWorkflow(workflow, clientId);
     console.log("Submit response:", submitResponse);
 
     if (submitResponse.error) {
@@ -80,6 +88,19 @@ export async function POST(req) {
     }
 
     console.log("Constructed video URLs:", videoUrls);
+
+    // Persist each video to the database (best-effort)
+    try {
+      for (const url of videoUrls) {
+        await query(
+          "INSERT INTO generated_videos (prompt, video_url) VALUES (?, ?)",
+          [params.prompt, url]
+        );
+      }
+      console.log(`Saved ${videoUrls.length} video(s) to DB.`);
+    } catch (dbErr) {
+      console.error("[generate-video] DB save failed (video still returned):", dbErr.message);
+    }
 
     return NextResponse.json({ videoUrls });
   } catch (error) {
