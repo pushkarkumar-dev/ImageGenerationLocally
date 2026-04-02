@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { COMFYUI_WS_URL } from "@/lib/comfyClient";
 
@@ -20,35 +20,35 @@ const PRESET_VIBE = ["Ethereal/Dreamy", "Gritty/Dark", "Sci-Fi/Futuristic", "Fan
 // SVG Icons
 const ImageIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-    <circle cx="8.5" cy="8.5" r="1.5"/>
-    <polyline points="21 15 16 10 5 21"/>
+    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+    <circle cx="8.5" cy="8.5" r="1.5" />
+    <polyline points="21 15 16 10 5 21" />
   </svg>
 );
 
 const VideoIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <polygon points="23 7 16 12 23 17 23 7"/>
-    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+    <polygon points="23 7 16 12 23 17 23 7" />
+    <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
   </svg>
 );
 
 const SparkleIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/>
+    <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z" />
   </svg>
 );
 
 const ExpandIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+    <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
   </svg>
 );
 
 const CloseIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="18" y1="6" x2="6" y2="18"/>
-    <line x1="6" y1="6" x2="18" y2="18"/>
+    <line x1="18" y1="6" x2="6" y2="18" />
+    <line x1="6" y1="6" x2="18" y2="18" />
   </svg>
 );
 
@@ -63,10 +63,11 @@ export default function Home() {
   const [imageUrls, setImageUrls] = useState([]);
   const [selectedImage, setSelectedImage] = useState(null);
   const [resolution, setResolution] = useState("1088x1088");
+  const [videoResolution, setVideoResolution] = useState("1920x1088");
   const [batchSize, setBatchSize] = useState(1);
   const [activeTab, setActiveTab] = useState("image");
   const [videoUrl, setVideoUrl] = useState(null);
-  
+
   // Node selection per task
   const [serverImage, setServerImage] = useState("http://192.168.0.158:8188");
   const [serverVideo, setServerVideo] = useState("http://192.168.0.158:8188");
@@ -90,6 +91,59 @@ export default function Home() {
   const [builderExtra, setBuilderExtra] = useState("");
   const [builderResult, setBuilderResult] = useState("");
   const [builderLoading, setBuilderLoading] = useState(false);
+
+  // Agent state
+  const [agentTheme, setAgentTheme] = useState("A cyberpunk neon monk");
+  const [agentIterations, setAgentIterations] = useState(5);
+  const [agentMediaType, setAgentMediaType] = useState("image");
+  const [agentImageResolution, setAgentImageResolution] = useState("1088x1088");
+  const [agentVideoResolution, setAgentVideoResolution] = useState("1920x1088");
+  const [agentStatus, setAgentStatus] = useState({ isRunning: false, currentIteration: 0, targetIterations: 0, logs: [] });
+  const logContainerRef = useRef(null);
+
+  // Poll agent status
+  useEffect(() => {
+    let interval;
+    if (activeTab === "agent" || agentStatus.isRunning) {
+      interval = setInterval(async () => {
+        try {
+          const res = await fetch("/api/agent/status");
+          if (res.ok) {
+            const data = await res.json();
+            setAgentStatus(data);
+          }
+        } catch (e) { }
+      }, 1500);
+    }
+    return () => clearInterval(interval);
+  }, [activeTab, agentStatus.isRunning]);
+
+  // Auto-scroll logs
+  useEffect(() => {
+    if (logContainerRef.current) {
+      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+    }
+  }, [agentStatus.logs]);
+
+  const startAgent = async () => {
+    const selectedRes = agentMediaType === "image" ? agentImageResolution : agentVideoResolution;
+    const [width, height] = selectedRes.split("x");
+    await fetch("/api/agent/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        theme: agentTheme,
+        iterations: Number(agentIterations),
+        mediaType: agentMediaType,
+        width: Number(width),
+        height: Number(height)
+      })
+    });
+  };
+
+  const stopAgent = async () => {
+    await fetch("/api/agent/stop", { method: "POST" });
+  };
 
   const generateImage = async () => {
     setLoading(true);
@@ -117,10 +171,11 @@ export default function Home() {
     setVideoUrl(null);
     setActiveWsServer(serverVideo);
     try {
+      const [width, height] = videoResolution.split("x");
       const response = await fetch("/api/generate-video", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, clientId, serverUrl: serverVideo }),
+        body: JSON.stringify({ prompt, clientId, serverUrl: serverVideo, width, height }),
       });
       const data = await response.json();
       if (data.videoUrls) setVideoUrl(data.videoUrls[0]);
@@ -202,7 +257,7 @@ export default function Home() {
         } else if (msg.type === "execution_start") {
           setProgress(0);
         }
-      } catch (e) {}
+      } catch (e) { }
     };
     return () => ws.close();
   }, [clientId, activeWsServer]);
@@ -210,8 +265,8 @@ export default function Home() {
   // Compute grid class based on image count
   const gridClass =
     imageUrls.length === 1 ? "cols-1" :
-    imageUrls.length <= 4 ? "cols-2" :
-    "cols-3";
+      imageUrls.length <= 4 ? "cols-2" :
+        "cols-3";
 
   const sliderPercent = ((batchSize - 1) / 7) * 100;
 
@@ -277,7 +332,7 @@ export default function Home() {
           justifyContent: "center",
           padding: "32px 16px",
         }}>
-          <div style={{ width: "100%", maxWidth: 920 }}>
+          <div style={{ width: "100%", maxWidth: 1200 }}>
 
             {/* Hero headline */}
             <div style={{ textAlign: "center", marginBottom: 32 }}>
@@ -338,6 +393,15 @@ export default function Home() {
                 >
                   <span style={{ display: "flex", alignItems: "center", gap: 7, justifyContent: "center" }}>
                     ✨ Prompt Builder
+                  </span>
+                </button>
+                <button
+                  className={`tab-btn${activeTab === "agent" ? " active" : ""}`}
+                  onClick={() => setActiveTab("agent")}
+                  style={{ border: "1px solid rgba(236,72,153,0.4)", background: activeTab === "agent" ? "linear-gradient(135deg, #ec4899, #ef4444)" : "rgba(236,72,153,0.1)", color: activeTab === "agent" ? "#fff" : "#fbcfe8" }}
+                >
+                  <span style={{ display: "flex", alignItems: "center", gap: 7, justifyContent: "center" }}>
+                    🤖 Agent
                   </span>
                 </button>
               </div>
@@ -412,7 +476,7 @@ export default function Home() {
                       />
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
-                      {[1,2,3,4,5,6,7,8].map(n => (
+                      {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
                         <span key={n} style={{ fontSize: "0.7rem", color: n <= batchSize ? "#7c3aed" : "#374151", fontWeight: 600 }}>{n}</span>
                       ))}
                     </div>
@@ -468,6 +532,24 @@ export default function Home() {
                       className="form-input"
                       style={{ resize: "vertical", minHeight: 80, lineHeight: 1.6 }}
                     />
+                  </div>
+
+                  {/* Video Resolution */}
+                  <div>
+                    <label htmlFor="videoResolution" className="form-label">Resolution</label>
+                    <select
+                      id="videoResolution"
+                      value={videoResolution}
+                      onChange={(e) => setVideoResolution(e.target.value)}
+                      className="form-select"
+                    >
+                      <option value="1280x720">1280 × 720 · 16:9 (HD)</option>
+                      <option value="720x1280">720 × 1280 · 9:16 (Vertical HD)</option>
+                      <option value="1920x1088">1920 × 1088 · 16:9 (FullHD)</option>
+                      <option value="1088x1920">1088 × 1920 · 9:16 (Vertical FullHD)</option>
+                      <option value="2560x1440">2560 × 1440 · 16:9 (2K)</option>
+                      <option value="1440x2560">1440 × 2560 · 9:16 (Vertical 2K)</option>
+                    </select>
                   </div>
 
                   {/* Info banner */}
@@ -536,7 +618,7 @@ export default function Home() {
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                       <label htmlFor="caption-prompt-image" className="form-label">Prompt Instructions</label>
-                      <select 
+                      <select
                         title="Load preset prompt"
                         style={{ fontSize: "0.75rem", padding: "2px 8px", width: "auto", background: "transparent", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, color: "#a78bfa", cursor: "pointer" }}
                         onChange={(e) => {
@@ -544,8 +626,8 @@ export default function Home() {
                           e.target.value = ""; // reset visual selection
                         }}
                       >
-                        <option value="" style={{background: "#1e1e2e"}}>📝 Preset Prompts...</option>
-                        {CAPTION_PRESETS.map((p, i) => <option key={i} value={p.value} style={{background: "#1e1e2e"}}>{p.label}</option>)}
+                        <option value="" style={{ background: "#1e1e2e" }}>📝 Preset Prompts...</option>
+                        {CAPTION_PRESETS.map((p, i) => <option key={i} value={p.value} style={{ background: "#1e1e2e" }}>{p.label}</option>)}
                       </select>
                     </div>
                     <textarea
@@ -601,11 +683,11 @@ export default function Home() {
                       className="form-input"
                     />
                   </div>
-                  
+
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                       <label htmlFor="caption-prompt-video" className="form-label">Prompt Instructions</label>
-                      <select 
+                      <select
                         title="Load preset prompt"
                         style={{ fontSize: "0.75rem", padding: "2px 8px", width: "auto", background: "transparent", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, color: "#a78bfa", cursor: "pointer" }}
                         onChange={(e) => {
@@ -613,8 +695,8 @@ export default function Home() {
                           e.target.value = ""; // reset visual selection
                         }}
                       >
-                        <option value="" style={{background: "#1e1e2e"}}>📝 Preset Prompts...</option>
-                        {CAPTION_PRESETS.map((p, i) => <option key={i} value={p.value} style={{background: "#1e1e2e"}}>{p.label}</option>)}
+                        <option value="" style={{ background: "#1e1e2e" }}>📝 Preset Prompts...</option>
+                        {CAPTION_PRESETS.map((p, i) => <option key={i} value={p.value} style={{ background: "#1e1e2e" }}>{p.label}</option>)}
                       </select>
                     </div>
                     <textarea
@@ -660,14 +742,14 @@ export default function Home() {
               {/* ── PROMPT BUILDER ── */}
               {activeTab === "prompt_builder" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 18 }} className="animate-fade-in">
-                  
+
                   {/* Builder Header Options */}
                   <div style={{ display: "flex", gap: 8, background: "rgba(0,0,0,0.2)", padding: 4, borderRadius: 12 }}>
-                    <button 
+                    <button
                       onClick={() => setBuilderTab("image")}
                       style={{ flex: 1, padding: "8px 16px", borderRadius: 8, background: builderTab === "image" ? "rgba(255,255,255,0.1)" : "transparent", color: builderTab === "image" ? "#fff" : "#94a3b8", fontWeight: 600, border: "none", cursor: "pointer", transition: "all 0.2s" }}
                     >🖼️ Image Prompt</button>
-                    <button 
+                    <button
                       onClick={() => setBuilderTab("video")}
                       style={{ flex: 1, padding: "8px 16px", borderRadius: 8, background: builderTab === "video" ? "rgba(255,255,255,0.1)" : "transparent", color: builderTab === "video" ? "#fff" : "#94a3b8", fontWeight: 600, border: "none", cursor: "pointer", transition: "all 0.2s" }}
                     >🎞️ Video Prompt</button>
@@ -785,7 +867,7 @@ export default function Home() {
                         className="form-input"
                         style={{ minHeight: 100, border: "none", background: "rgba(255,255,255,0.02)" }}
                       />
-                      <button 
+                      <button
                         onClick={() => {
                           setPrompt(builderResult); // populate global prompt
                           setActiveTab(builderTab); // switch context
@@ -796,6 +878,146 @@ export default function Home() {
                       </button>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* ── AUTONOMOUS AGENT ── */}
+              {activeTab === "agent" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 18 }} className="animate-fade-in">
+
+                  <div style={{ padding: "16px", borderRadius: "12px", background: "rgba(236,72,153,0.1)", border: "1px solid rgba(236,72,153,0.3)" }}>
+                    <h3 style={{ margin: "0 0 12px 0", fontSize: "1.1rem", color: "#fbcfe8", display: "flex", alignItems: "center", gap: 8 }}>
+                      <span className={agentStatus.isRunning ? "spinner" : ""} style={{ display: "inline-block" }}>{agentStatus.isRunning ? "⚙️" : "🤖"}</span> Autonomous Loop Engine
+                    </h3>
+                    <p style={{ margin: "0 0 16px 0", fontSize: "0.85rem", color: "#f4f4f5", lineHeight: 1.5 }}>
+                      The Agent securely delegates ideation to your local LMStudio `qwen3` model, then automatically queues and scales execution across your multi-GPU array.
+                    </p>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+                      <div>
+                        <label className="form-label">Core Theme Definition</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={agentTheme}
+                          onChange={e => setAgentTheme(e.target.value)}
+                          placeholder="e.g. Dreamy cyberpunk neo-tokyo"
+                          disabled={agentStatus.isRunning}
+                        />
+                      </div>
+                      <div style={{ display: "flex", gap: 12 }}>
+                        <div style={{ flex: 1 }}>
+                          <label className="form-label">Iterations</label>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={agentIterations}
+                            onChange={e => setAgentIterations(e.target.value)}
+                            min="1" max="10000"
+                            disabled={agentStatus.isRunning}
+                          />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <label className="form-label">Media Target</label>
+                          <select
+                            className="form-select"
+                            value={agentMediaType}
+                            onChange={e => setAgentMediaType(e.target.value)}
+                            disabled={agentStatus.isRunning}
+                          >
+                            <option value="image">Image</option>
+                            <option value="video">Video</option>
+                          </select>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <label className="form-label">Resolution</label>
+                          {agentMediaType === "image" ? (
+                            <select
+                              value={agentImageResolution}
+                              onChange={(e) => setAgentImageResolution(e.target.value)}
+                              className="form-select"
+                              disabled={agentStatus.isRunning}
+                            >
+                              <option value="1088x1088">1088 × 1088 · Square</option>
+                              <option value="1024x576">1024 × 576 · 16:9 (HD)</option>
+                              <option value="576x1024">576 × 1024 · 9:16 (Story)</option>
+                              <option value="2048x1152">2048 × 1152 · 16:9 (2K)</option>
+                              <option value="1152x2048">1152 × 2048 · 9:16 (2K)</option>
+                              <option value="4096x2304">4096 × 2304 · 16:9 (4K)</option>
+                              <option value="2304x4096">2304 × 4096 · 9:16 (4K)</option>
+                            </select>
+                          ) : (
+                            <select
+                              value={agentVideoResolution}
+                              onChange={(e) => setAgentVideoResolution(e.target.value)}
+                              className="form-select"
+                              disabled={agentStatus.isRunning}
+                            >
+                              <option value="1280x720">1280 × 720 · 16:9 (HD)</option>
+                              <option value="720x1280">720 × 1280 · 9:16 (Vertical HD)</option>
+                              <option value="1920x1088">1920 × 1088 · 16:9 (FullHD)</option>
+                              <option value="1088x1920">1088 × 1920 · 9:16 (Vertical FullHD)</option>
+                              <option value="2560x1440">2560 × 1440 · 16:9 (2K)</option>
+                              <option value="1440x2560">1440 × 2560 · 9:16 (Vertical 2K)</option>
+                            </select>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {!agentStatus.isRunning ? (
+                      <button onClick={startAgent} className="btn-generate" style={{ background: "linear-gradient(135deg, #ec4899, #ef4444)", border: "none" }}>
+                        🚀 Start Autonomous Process
+                      </button>
+                    ) : (
+                      <div style={{ display: "flex", gap: 12 }}>
+                        <div style={{ flex: 1, padding: "10px", borderRadius: "8px", background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.1)", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center" }}>
+                          <span style={{ fontSize: "0.75rem", color: "#a1a1aa", textTransform: "uppercase" }}>Progress</span>
+                          <span style={{ fontSize: "1.2rem", fontWeight: "bold", color: "#fff" }}>{agentStatus.currentIteration} / {agentStatus.targetIterations}</span>
+                        </div>
+                        <button onClick={stopAgent} className="btn-generate" style={{ flex: 2, background: "rgba(220,38,38,0.2)", border: "1px solid rgba(220,38,38,0.5)" }}>
+                          🛑 Abort Process
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Terminal Window */}
+                  <div>
+                    <label className="form-label">Agent Output Feed</label>
+                    <div
+                      ref={logContainerRef}
+                      style={{
+                        height: 300,
+                        background: "#0f172a",
+                        border: "1px solid #1e293b",
+                        borderRadius: "12px",
+                        padding: "16px",
+                        fontFamily: "monospace",
+                        fontSize: "0.8rem",
+                        color: "#a78bfa",
+                        overflowY: "auto",
+                        boxShadow: "inset 0 4px 20px rgba(0,0,0,0.5)"
+                      }}
+                    >
+                      {agentStatus.logs.length === 0 ? (
+                        <div style={{ color: "#475569", fontStyle: "italic" }}>No logs yet. Initializing core modules...</div>
+                      ) : (
+                        agentStatus.logs.map((log, idx) => {
+                          const isError = log.includes("[ERROR]");
+                          const isSuccess = log.includes("[Success]");
+                          const isEureka = log.includes("[Eureka!]");
+                          let color = "#a78bfa";
+                          if (isError) color = "#ef4444";
+                          if (isSuccess) color = "#10b981";
+                          if (isEureka) color = "#38bdf8";
+
+                          return <div key={idx} style={{ marginBottom: 4, color, lineHeight: 1.4 }}>{log}</div>
+                        })
+                      )}
+                    </div>
+                  </div>
+
                 </div>
               )}
             </div>
@@ -809,7 +1031,7 @@ export default function Home() {
                     {progress > 0 ? `Generating... ${progress}%` : "AI is warming up..."}
                   </p>
                 </div>
-                
+
                 {/* Progress bar container */}
                 <div style={{ width: "100%", height: 6, background: "rgba(255,255,255,0.08)", borderRadius: 99, overflow: "hidden" }}>
                   <div style={{
