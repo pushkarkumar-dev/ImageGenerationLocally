@@ -104,6 +104,7 @@ function GpuCard({ device, index }) {
           </p>
           <p style={{ fontSize: "0.7rem", color: "#6b7280", marginTop: 2 }}>
             Device {device.index ?? index} · {device.type?.toUpperCase() ?? "CUDA"}
+            {device.source && ` · Port ${new URL(device.source).port || "80"}`}
           </p>
         </div>
         <div style={{
@@ -152,8 +153,7 @@ function GpuCard({ device, index }) {
   );
 }
 
-// ── System Card ───────────────────────────────────────────────────────────────
-function SystemCard({ system, queue }) {
+function SystemCard({ system, instances }) {
   const ramUsed = (system.ram_total ?? 0) - (system.ram_free ?? 0);
   return (
     <div style={{
@@ -170,28 +170,44 @@ function SystemCard({ system, queue }) {
         value={ramUsed}
         max={system.ram_total}
         color="#06b6d4"
-        label="RAM"
+        label="Shared RAM"
         sublabel={`${fmt(ramUsed)} / ${fmt(system.ram_total)}`}
       />
 
-      {/* Queue */}
-      <div style={{ display: "flex", gap: 10 }}>
-        <div style={{
-          flex: 1, padding: "12px", borderRadius: 10, textAlign: "center",
-          background: queue.running > 0 ? "rgba(124,58,237,0.1)" : "rgba(255,255,255,0.03)",
-          border: `1px solid ${queue.running > 0 ? "rgba(124,58,237,0.3)" : "rgba(255,255,255,0.06)"}`,
-        }}>
-          <p style={{ fontSize: "1.5rem", fontWeight: 800, color: "#a78bfa" }}>{queue.running}</p>
-          <p style={{ fontSize: "0.65rem", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em" }}>Running</p>
-        </div>
-        <div style={{
-          flex: 1, padding: "12px", borderRadius: 10, textAlign: "center",
-          background: "rgba(255,255,255,0.03)",
-          border: "1px solid rgba(255,255,255,0.06)",
-        }}>
-          <p style={{ fontSize: "1.5rem", fontWeight: 800, color: "#94a3b8" }}>{queue.pending}</p>
-          <p style={{ fontSize: "0.65rem", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em" }}>Queued</p>
-        </div>
+      <div style={{ height: 1, background: "rgba(255,255,255,0.05)", margin: "4px 0" }} />
+
+      <p style={{ fontSize: "0.75rem", fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+        ComfyUI Instances
+      </p>
+
+      {/* Per-instance queues */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {instances?.map((inst, i) => {
+          const port = new URL(inst.url).port || "80";
+          const isActive = inst.queue.running > 0;
+          return (
+            <div key={i} style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "10px 14px", borderRadius: 10,
+              background: isActive ? "rgba(124,58,237,0.1)" : "rgba(255,255,255,0.03)",
+              border: `1px solid ${isActive ? "rgba(124,58,237,0.3)" : "rgba(255,255,255,0.06)"}`,
+            }}>
+              <span style={{ fontSize: "0.85rem", fontWeight: 600, color: isActive ? "#a78bfa" : "#e2e8f0" }}>
+                Node {port}
+              </span>
+              <div style={{ display: "flex", gap: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ fontSize: "0.85rem", color: isActive ? "#d8b4fe" : "#94a3b8", fontWeight: 700 }}>{inst.queue.running}</span>
+                  <span style={{ fontSize: "0.65rem", textTransform: "uppercase", color: "#6b7280", fontWeight: 600 }}>run</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ fontSize: "0.85rem", color: "#94a3b8", fontWeight: 700 }}>{inst.queue.pending}</span>
+                  <span style={{ fontSize: "0.65rem", textTransform: "uppercase", color: "#6b7280", fontWeight: 600 }}>wait</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {system.os && (
@@ -333,7 +349,7 @@ export default function DashboardPage() {
                 gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
                 gap: 16,
               }}>
-                <SystemCard system={data.system} queue={data.queue} />
+                <SystemCard system={data.system} instances={data.instances} />
 
                 {/* Quick stats */}
                 <div style={{

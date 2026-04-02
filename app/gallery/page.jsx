@@ -470,6 +470,12 @@ export default function GalleryPage() {
             }}>
               <HomeIcon /> Studio
             </Link>
+            <Link href="/dashboard" style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "7px 14px", borderRadius: 10,
+              background: "rgba(124,58,237,0.15)", border: "1px solid rgba(124,58,237,0.3)",
+              color: "#a78bfa", fontSize: "0.8rem", fontWeight: 600, textDecoration: "none",
+            }}>⚡ Dashboard</Link>
             <Link href="/trash" style={{
               display: "flex", alignItems: "center", gap: 6,
               padding: "7px 14px", borderRadius: 10,

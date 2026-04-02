@@ -13,13 +13,13 @@ export async function POST(req) {
     }
 
     const params = await req.json();
-    const { clientId, ...genParams } = params;
+    const { clientId, serverUrl, ...genParams } = params;
     console.log("Received params:", genParams);
 
     const workflow = applyParams(genParams);
     console.log("Applied workflow:", JSON.stringify(workflow, null, 2));
 
-    const submitResponse = await submitWorkflow(workflow, clientId);
+    const submitResponse = await submitWorkflow(workflow, clientId, serverUrl);
     console.log("Submit response:", submitResponse);
 
     if (submitResponse.error) {
@@ -42,7 +42,7 @@ export async function POST(req) {
     console.log(`Polling for results for prompt ID: ${promptId}`);
     while (attempts < maxAttempts) {
       await new Promise((resolve) => setTimeout(resolve, interval));
-      history = await getHistory(promptId);
+      history = await getHistory(promptId, serverUrl);
       if (Object.keys(history).length > 0) {
         console.log(`Received history for prompt ID: ${promptId}`);
         break;
